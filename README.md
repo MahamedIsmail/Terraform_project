@@ -1,8 +1,12 @@
 # Automated WordPress Deployment on AWS with Terraform
 
 One `terraform apply` builds a complete network and web server on AWS and installs a working WordPress site on it, with no clicking in the AWS console and no manual SSH setup.
-
+<!--
 <img src="screenshots/demo.gif" alt="Demo: terraform apply, open the site, click through to GitHub" width="100%">
+
+-->
+[![Watch the demo](screenshots/11-wordpress-post-live.png)](screenshots/demo-github.mp4)
+
 
 **Tech:** Terraform · AWS (VPC, Subnet, Internet Gateway, Route Table, Security Groups, EC2) · Amazon Linux 2023 · Bash · cloud-init · Apache · PHP · MariaDB · WordPress
 
