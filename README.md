@@ -5,7 +5,7 @@ One `terraform apply` builds a complete network and web server on AWS and instal
 <img src="screenshots/demo.gif" alt="Demo: terraform apply, open the site, click through to GitHub" width="100%">
 
 -->
-[![Watch the demo](screenshots/11-wordpress-post-live.png)](screenshots/demo-github.mp4)
+[![Watch the demo](screenshots/11-wordpress-post-live.png)](demo-github.mp4)
 
 
 **Tech:** Terraform · AWS (VPC, Subnet, Internet Gateway, Route Table, Security Groups, EC2) · Amazon Linux 2023 · Bash · cloud-init · Apache · PHP · MariaDB · WordPress
