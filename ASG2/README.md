@@ -1,226 +1,350 @@
-# Automated WordPress Deployment on AWS with Terraform
+# Assignment 2 – EC2 Deployment with Cloud-Init
 
-One `terraform apply` builds a complete network and web server on AWS and installs a working WordPress site on it, with no clicking in the AWS console and no manual SSH setup.
-<!--
-<img src="screenshots/demo.gif" alt="Demo: terraform apply, open the site, click through to GitHub" width="100%">
+Automated deployment of an NGINX web server on AWS EC2. Terraform creates the infrastructure, and a cloud-init file configures the server on first boot. When the instance comes up, the website is already live with **no manual steps**.
 
--->
-
-
-
-https://github.com/user-attachments/assets/6c816635-a9cc-4bd7-a9cd-56ac27cdfc4b
-
-
-
-
-**Tech:** Terraform · AWS (VPC, Subnet, Internet Gateway, Route Table, Security Groups, EC2) · Amazon Linux 2023 · Bash · cloud-init · Apache · PHP · MariaDB · WordPress
-
-## The result
-
-`terraform apply` finishes and prints the server's public IP:
-
-![terraform apply output](screenshots/10-terraform-apply-output.png)
-
-Opening that IP shows the live WordPress site running on EC2, with a link back to this repo:
-
-![Live WordPress post](screenshots/11-wordpress-post-live.png)
-
-And the WordPress admin dashboard, fully working:
-
-![WordPress dashboard running on EC2](screenshots/09-wordpress-dashboard.png)
+![My website live on EC2](screenshots/03-my-website-live.png)
 
 ---
 
-## What it builds
+## Assignment requirements
 
-```mermaid
-flowchart LR
-    User[Browser] -- HTTP :80 --> IGW[Internet Gateway]
-    Admin[My IP] -- SSH :22 --> IGW
-    subgraph VPC["VPC 10.0.0.0/16"]
-        RT[Route table<br/>0.0.0.0/0 → IGW]
-        subgraph Subnet["Public subnet 10.0.0.0/24"]
-            subgraph SG[Security group]
-                EC2["EC2 t3.micro · Amazon Linux 2023<br/>Apache + PHP + MariaDB + WordPress"]
-            end
-        end
-    end
-    IGW --> RT --> EC2
+**Objective:** Configure a cloud-init file and use Terraform to automate an EC2 deployment.
+
+**Tasks**
+
+- [x] Write a cloud-init YAML file
+- [x] Install and configure software on boot (NGINX)
+- [x] Pass cloud-init to the EC2 instance through Terraform
+- [x] Ensure the instance comes online fully configured with no manual steps
+
+**What should be demonstrated**
+
+- How Terraform uses `user_data` or `user_data_base64`
+- How cloud-init automates instance configuration
+- How to structure Terraform for clarity (variables, outputs, modules if needed)
+
+---
+
+## Repository structure
+
+```
+.
+├── main.tf            # provider, security group, EC2 instance
+├── variables.tf       # region, instance type, AMI, etc.
+├── outputs.tf         # public IP and website URL
+├── cloud-init.yaml    # server configuration applied on first boot
+├── screenshots/       # validation error, nginx default page, final result
+└── README.md
 ```
 
-| Resource | Purpose |
+---
+
+## How it works
+
+```
+terraform apply
+      │
+      ▼
+Terraform creates the EC2 instance and passes cloud-init.yaml as user_data
+      │
+      ▼
+Instance boots → cloud-init reads the user data
+      │
+      ├─ package_update / packages   → updates package list, installs nginx
+      ├─ write_files (defer: true)   → writes index.html + nginx site config
+      └─ runcmd                      → checks config, enables and restarts nginx
+      │
+      ▼
+Website is live at http://<public-ip>
+```
+
+---
+
+## The cloud-init file
+
+```yaml
+#cloud-config
+package_update: true
+packages:
+  - nginx
+
+write_files:
+  - path: /var/www/Website/index.html
+    permissions: '0644'
+    defer: true
+    content: |
+      <html>
+        <head>
+          <title>Welcome to My Website</title>
+        </head>
+        <body>
+          <h1>Hello, World!</h1>
+          <p>Hosted on an EC2 instance in nginx webserver.</p>
+        </body>
+      </html>
+
+  - path: /etc/nginx/conf.d/site.conf
+    permissions: '0644'
+    defer: true
+    content: |
+      server {
+          listen 80 default_server;
+          listen [::]:80 default_server;
+
+          server_name _;
+
+          root /var/www/Website;
+          index index.html;
+
+          location / {
+              try_files $uri $uri/ =404;
+          }
+      }
+
+runcmd:
+  - nginx -t
+  - systemctl enable nginx
+  - systemctl restart nginx
+```
+
+### What each part does
+
+| Key | Module | Purpose |
+|---|---|---|
+| `package_update` | Package Update Upgrade Install | Refreshes the package list (`dnf`) before installing |
+| `packages` | Package Update Upgrade Install | Installs nginx. cloud-init picks the right package manager for the distro |
+| `write_files` | Write Files | Creates the web page and the nginx site config. Parent folders are created automatically |
+| `defer: true` | Write Files | Writes the files **after** packages are installed, so nginx's install doesn't interfere |
+| `permissions: '0644'` | Write Files | Readable by the `nginx` user, writable only by root |
+| `runcmd` | Runcmd | Runs as root on first boot: validates the nginx config, enables and starts nginx |
+
+### Notes on the nginx config
+
+- **`/etc/nginx/conf.d/`** is where Amazon Linux loads extra sites from (Ubuntu uses `sites-enabled/` instead).
+- **`default_server`** makes this site the one nginx uses when the request's host name (here, the bare IP) doesn't match any `server_name`. Without it, the built-in default site in `nginx.conf` answers instead.
+- **`server_name _;`** is the convention for "no specific domain".
+
+---
+
+## Terraform: passing cloud-init to EC2
+
+> Adjust names below to match the `.tf` files in this repo.
+
+### `user_data` vs `user_data_base64`
+
+| Argument | Use when |
 |---|---|
-| `aws_vpc` | Private network for the project (`10.0.0.0/16`) |
-| `aws_subnet` | Public subnet where the web server lives (`10.0.0.0/24`) |
-| `aws_internet_gateway` | Connects the VPC to the internet |
-| `aws_default_route_table` | Sends all outbound traffic (`0.0.0.0/0`) to the internet gateway |
-| `aws_security_group` + rules | Inbound HTTP/HTTPS from anywhere, SSH only from my IP. Outbound 80/443/22 |
-| `aws_instance` | The web server. A bash user data script installs and configures everything on first boot |
+| `user_data` | You pass **plain text** (like a YAML file). The AWS provider base64-encodes it for you. Used in this project. |
+| `user_data_base64` | The data is **already base64-encoded**, e.g. gzipped or multi-part output from the `cloudinit_config` data source. |
 
-## Project structure
-
-```
-Terraform_project/
-├── main.tf               # provider, VPC, subnet, IGW, route table, calls the EC2 module
-├── locals.tf             # CIDR blocks for the network
-├── variable.tf           # inputs: my IP and database credentials
-├── output.tf             # prints the web server's public IP
-├── .gitignore            # keeps state files, tfvars and .terraform/ out of Git
-└── EC2_mod/              # child module: everything about the web server
-    ├── ec2.tf            # EC2 instance, security group and its rules
-    ├── local.tf          # AMI, instance type, key pair name, user data template inputs
-    ├── variable.tf       # module inputs (subnet, VPC, IP, DB settings)
-    ├── output.tf         # exposes the instance's public IP to the root module
-    └── User_data_script.sh   # bootstrap script (rendered with templatefile)
-```
-
-**How the pieces connect:**
-
-- The **root module** builds the network and passes the subnet ID, VPC ID, my IP and the database credentials into `EC2_mod`.
-- `EC2_mod` renders `User_data_script.sh` with `templatefile()`, so Terraform injects the DB name, user and passwords into the script before the EC2 instance receives it.
-- The module's `webserver_ip` output is read in the root as `module.EC2_mod.webserver_ip` and printed after `apply`.
-- `user_data_replace_on_change = true` makes Terraform rebuild the instance whenever the script changes, because user data only runs on the first boot.
-- The database variables are marked `sensitive = true` in the module, so Terraform hides them in its output.
-
-## What the user data script does
-
-The script runs as root on first boot and is split into five phases:
-
-1. **Install:** Apache (`httpd`), PHP and its MySQL extensions, MariaDB and `wget`. Then download and unpack the latest WordPress.
-2. **Configure the database:** create a dedicated database and a user that can only connect from `localhost`, and grant that user all privileges on the WordPress database only.
-3. **Configure WordPress:** copy `wp-config-sample.php` to `wp-config.php` and use `sed` to replace the placeholders with the real DB name, user and password.
-4. **Configure Apache:** copy WordPress into `/var/www/html`, give ownership to `apache:apache`, set directories to `2775` and files to `0644`.
-5. **Run:** enable and start `httpd` and `mariadb` so they also come back after a reboot.
-
-`set -x` prints every command to the cloud-init log, which made debugging much easier.
-
-## How to run it
-
-**Requirements:** an AWS account, the AWS CLI configured (`aws configure`), Terraform, and an existing EC2 key pair named `wordpress_webserver_key` in `eu-north-1`.
-
-1. Create `terraform.tfvars` in the project root (it's git-ignored):
-
-   ```hcl
-   IP_address             = "203.0.113.10/32"   # your public IP + /32 (curl ifconfig.me)
-   Database_name          = "wordpress_db"
-   Database_User_name     = "wp_user"
-   Database_User_password = "a-strong-password"
-   Databas_root_password  = "another-strong-password"
-   ```
-
-2. Deploy:
-
-   ```bash
-   terraform init
-   terraform plan
-   terraform apply
-   ```
-
-3. Open the IP from the `webserver_ip_adress` output in your browser. Wait a few minutes for the user data script to finish, then complete the WordPress install wizard.
-
-4. Tear everything down when finished, so AWS doesn't charge you:
-
-   ```bash
-   terraform destroy
-   ```
-
-<p>
-  <img src="screenshots/07-wordpress-install-wizard.png" alt="WordPress install wizard" width="49%">
-  <img src="screenshots/08-wordpress-login.png" alt="WordPress login" width="49%">
-</p>
-
----
-
-## Problems I hit and how I fixed them
-
-### 1. Packages wouldn't download: the security group blocked HTTPS
-
-The user data script never installed anything. When I SSH'd in and ran `dnf` by hand, every repository timed out.
-
-![dnf timeout](screenshots/01-sg-timeout-error.png)
-
-**Cause:** my security group only allowed outbound traffic on ports **80 and 22**. The Amazon Linux package repositories are served over **HTTPS (port 443)**, so every download was silently dropped.
-
-**Fix:** added an outbound rule for port 443. The packages installed immediately.
-
-**Lesson:** security groups block outbound traffic too. A "timeout" usually means a firewall rule, not a broken server.
-
-### 2. `CREATE: command not found`: MySQL was running interactively
-
-My database commands were valid SQL, but cloud-init reported every one of them as "command not found".
-
-![command not found](screenshots/02-mysql-command-not-found.png)
-
-**Cause:** I started `mysql -u root -p` on one line and wrote the SQL on the following lines, the way you'd type it in a terminal.
-
-![interactive script](screenshots/03-interactive-mysql-script.png)
-
-In a script, `mysql` started in **interactive mode** and waited for input that never came. When it exited, bash tried to run `CREATE`, `GRANT` and `FLUSH` as if they were bash commands.
-
-**Fix:** run all the SQL in **one non-interactive command** with `mysql -e "..."`:
-
-![non-interactive fix](screenshots/04-mysql-non-interactive-fix.png)
-
-**Lessons:**
-- A user data script has nobody to answer prompts. Every command has to be non-interactive.
-- **Quoting matters:** the outer **double quotes** let bash expand my variables, and the inner **single quotes** pass the values to MariaDB as SQL strings.
-
-### 3. "Error establishing a database connection": wp-config was never written
-
-The database existed. I checked with `mysql` and my user and database were both there. But WordPress still couldn't connect.
-
-![db connection error](screenshots/06-db-connection-error.png)
-
-**Cause:** my first version opened `wp-config.php` with `nano`, which is another interactive program, so the script got stuck. The lines after it, PHP `define(...)` statements, were then run by bash, which didn't understand them.
-
-![nano in script](screenshots/05-interactive-nano-wp-config.png)
-
-Next I tried `echo "..." > wp-config.php`. It ran, but it **overwrote the whole file**, and WordPress expects its settings in specific places in that file.
-
-**Fix:** used `sed -i` to **find and replace** the placeholders (`database_name_here`, `username_here`, `password_here`) with the real values. It's non-interactive, and I don't need to know where in the file each setting is.
-
-**Lesson:** to edit config files in automation, use stream editors like `sed`, not interactive editors.
-
-### 4. Changing the script didn't change the server
-
-**Cause:** user data only runs on an instance's **first boot**. Editing the script did nothing to the running server.
-
-**Fix:** `user_data_replace_on_change = true`, so Terraform replaces the instance whenever the script changes. The side effect is that each rebuild gets a **new public IP**, which is why the IP is printed as an output.
-
-### 5. `Reference to undeclared resource` when reading a module output
+### `main.tf` (core parts)
 
 ```hcl
-value = EC2_mod.webserver_ip          # ❌ Terraform reads this as a resource
-value = module.EC2_mod.webserver_ip   # ✅ module outputs need the module. prefix
+resource "aws_security_group" "web" {
+  name        = "web-sg"
+  description = "Allow HTTP and SSH"
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "web" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.web.id]
+
+  user_data                   = file("${path.module}/cloud-init.yaml")
+  user_data_replace_on_change = true
+
+  tags = {
+    Name = "cloud-init-nginx"
+  }
+}
 ```
 
-**Lesson:** resources are `type.name`, variables are `var.name`, and module outputs are `module.<module>.<output>`.
+`user_data_replace_on_change = true` matters: most cloud-init modules run **once per instance**, so editing the YAML on an existing instance does nothing. This setting makes Terraform replace the instance when the cloud-init file changes, so the new config actually runs.
 
-### 6. Git: keeping secrets out and pushing over SSH
+### `variables.tf`
 
-- **`.gitignore` typo:** I wrote `.terrafrom/**` instead of `.terraform/**`, so the provider folder wasn't ignored. `git check-ignore -v <file>` showed exactly which rule matched, or that none did.
-- **`*.tfstate` didn't catch `terraform.tfstate.backup`**, because `*.tfstate` only matches names *ending* in `.tfstate`. The backup needed its own pattern.
-- **`Permission denied (publickey)` on push:** my SSH key has a custom name (`gitid`), so SSH never tried it automatically, and no ssh-agent was running. I fixed it by starting the agent and adding the **private** key (`ssh-add ~/.ssh/gitid`, not the `.pub`).
+```hcl
+variable "region"        { default = "eu-north-1" }
+variable "instance_type" { default = "t3.micro" }
+variable "ami_id"        { description = "Amazon Linux 2023 AMI ID" }
+variable "key_name"      { description = "EC2 key pair for SSH" }
+variable "my_ip_cidr"    { description = "Your IP for SSH, e.g. 1.2.3.4/32" }
+```
+
+### `outputs.tf`
+
+```hcl
+output "public_ip" {
+  value = aws_instance.web.public_ip
+}
+
+output "website_url" {
+  value = "http://${aws_instance.web.public_ip}"
+}
+```
+
+### Deploy
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+Open the `website_url` output in a browser. Allow a minute after the instance starts for cloud-init to finish.
 
 ---
 
-## What I learnt
+## Validating the cloud-config
 
-- **Infrastructure as Code end to end.** Terraform builds the network, the firewall and the server in the right order from code, and `terraform destroy` removes everything, so nothing is forgotten and left running.
-- **Modules and outputs.** The root module builds the network, and the child module owns the web server. Values flow *in* through variables and *out* through outputs.
-- **Networking fundamentals.** A subnet is only "public" when its route table sends `0.0.0.0/0` to an internet gateway. Security groups filter traffic **in both directions**.
-- **Automation means non-interactive.** Anything that waits for input (`mysql -p`, `nano`, prompts) will hang or break in user data.
-- **Debugging on the instance.** `set -x`, `/var/log/cloud-init-output.log` and running the commands by hand over SSH showed me where each failure happened.
-- **Secrets and state.** I marked passwords `sensitive` and kept `terraform.tfvars` and `terraform.tfstate` out of Git, because state stores values in plain text.
-- **Key pair choice.** I used an existing AWS key pair instead of generating one with Terraform's `tls_private_key`. That resource stores the private key unencrypted in the state file.
+cloud-init ships with a schema validator that checks the YAML against the rules for every module (required keys, value types, allowed options).
 
-## Next improvements
+```bash
+# Before deploying, on any machine with cloud-init installed
+cloud-init schema --config-file cloud-init.yaml
 
-- Set a MariaDB root password and remove the test database (equivalent to `mysql_secure_installation`).
-- Generate WordPress security keys and salts in `wp-config.php` instead of leaving the defaults.
-- Look up the AMI with a `data "aws_ami"` source instead of hard-coding an ID that only works in `eu-north-1`.
-- Mark the database variables `sensitive` in the root module too, and fix the copy-pasted variable descriptions.
-- Commit `.terraform.lock.hcl` so everyone uses the same provider version (my `*.hcl` ignore rule currently excludes it).
-- Remove the outbound SSH rule, which the server doesn't need.
-- Store state in a remote S3 backend so the project can be shared safely.
-- Move the database to Amazon RDS and add HTTPS with a certificate.
+# On a running instance, check the user data it booted with
+sudo cloud-init schema --system
+```
+
+A valid file prints `Valid cloud-config`.
+
+> **Note:** On Amazon Linux 2023 (cloud-init 22.2.2) the `--annotate` flag crashes with a Python `KeyError` when the config has errors. Run without `--annotate` to see the error list.
+
+---
+
+## Trial and error
+
+The final config took several iterations. Each mistake taught something about YAML or cloud-init.
+
+### 1. `'path' is a required property`
+
+```
+write_files.1: 'path' is a required property,
+write_files.2: 'path' is a required property,
+write_files.3: 'path' is a required property
+```
+
+![Schema validation error](screenshots/01-schema-validation-error.png)
+
+**Cause:** I put a dash (`-`) in front of every key in a file entry. In YAML a dash starts a **new list item**, so cloud-init saw several "files" without a path.
+
+```yaml
+# Wrong: 3 entries
+- path: /etc/nginx/conf.d/site.conf
+- content: ...
+- permissions: '0644'
+
+# Right: 1 entry with 3 keys
+- path: /etc/nginx/conf.d/site.conf
+  content: ...
+  permissions: '0644'
+```
+
+**Lesson:** one dash per file. In `packages` and `runcmd` every line gets a dash because each item is a single value; in `write_files` each item is an object with several keys.
+
+### 2. `write_files:` written twice
+
+I started a new `write_files:` block for the second file. A YAML key can only appear once, so the second block **silently replaced** the first and `index.html` was never written. Fix: put both files under one `write_files:`.
+
+### 3. Indentation mistakes
+
+- Keys at column 0 (`content:` not lined up under `path:`) no longer belong to the file entry. The schema check still passes because the entry has a `path`, but the file ends up empty.
+- Keys indented as far as the text under `content: |` become **part of the file's content**.
+- Without `|` after `content:`, YAML joins all lines into one.
+
+**Lesson:** every key belonging to a file must start in the same column as `path`.
+
+### 4. Invalid nginx config
+
+`server_name;` with no value is invalid in nginx and stops it from starting. Fixed with `server_name _;`. I also added `nginx -t` to `runcmd` so nginx config errors show up in the cloud-init log.
+
+### 5. nginx showed its default page instead of my site
+
+Validation passed and nginx was running, but the browser showed **"Welcome to nginx!"**.
+
+![nginx default page instead of my site](screenshots/02-nginx-default-page.png)
+
+**Cause:** Amazon Linux's `nginx.conf` already contains a default site on port 80. I was visiting the bare IP, which matched neither site's `server_name`, so nginx used its fallback site, the built-in one.
+
+**Clue in the logs:** in `/var/log/nginx/access.log`, the 404 for `/favicon.ico` was 3464 bytes, the size of the built-in site's styled `404.html`. My site would have returned nginx's small plain 404, so the requests were going to the wrong site.
+
+**Fix:** add `default_server` to my `listen` lines. After that, the browser showed my **Hello, World!** page, all configured automatically by cloud-init:
+
+![My website live on EC2](screenshots/03-my-website-live.png)
+
+**Related lesson:** the nginx config came from Ubuntu's official tutorial, which uses port 81 to avoid exactly this clash and a different folder layout (`sites-enabled/`). Official examples assume their own distro.
+
+---
+
+## Debugging steps
+
+| What to check | Command |
+|---|---|
+| Did cloud-init finish, and with errors? | `cloud-init status --long` |
+| Output of package installs and `runcmd` | `sudo cat /var/log/cloud-init-output.log` |
+| Detailed cloud-init log (module by module) | `sudo less /var/log/cloud-init.log` |
+| The user data the instance actually received | `sudo cat /var/lib/cloud/instance/user-data.txt` |
+| Validate the received config | `sudo cloud-init schema --system` |
+| Were the files written? | `ls -l /var/www/Website/ /etc/nginx/conf.d/` |
+| Is the nginx config valid? | `sudo nginx -t` |
+| What nginx actually loaded | `sudo nginx -T \| grep -E "listen\|server_name\|root"` |
+| What the server returns locally | `curl localhost` |
+| Requests and errors | `/var/log/nginx/access.log`, `/var/log/nginx/error.log` |
+
+If `curl localhost` shows the page but the browser doesn't, the problem is outside the server: security group, `http://` vs `https://`, or the wrong IP.
+
+---
+
+## Why cloud-config instead of a plain user-data script
+
+User data can also be a bash script (`#!/bin/bash`). This project uses `#cloud-config` instead, and it turned out to be much smoother:
+
+- **Modules do the work for you.** Each key (`packages`, `write_files`, `runcmd`, `users`, `timezone`…) is handled by a module that knows how to do that job properly. No need to write the logic for creating folders, setting permissions or decoding content.
+- **Tasks and configuration are separated.** Installing software, writing files and running commands are clearly separate sections, instead of one long script mixing everything.
+- **Distro-independent.** `packages:` uses `dnf` on Amazon Linux and `apt` on Ubuntu, with the same YAML.
+- **Ordering is handled.** Modules run in defined boot stages, and `defer: true` lets files be written after packages are installed.
+- **Built-in validation.** `cloud-init schema` catches mistakes like missing required keys before or after deploying. A bash script just fails at runtime.
+- **Clear logging.** Everything is logged to `/var/log/cloud-init.log` and `cloud-init-output.log`, with module names, making it easy to see what ran and what failed.
+- **Documentation and support.** The official module reference lists every module, its keys, supported distros, how often it runs and examples, and cloud-init is the standard on all major clouds.
+
+---
+
+## Key takeaways
+
+- A **dash** starts a new list item; **indentation** decides what belongs to what.
+- Most cloud-init modules run **once per instance**. To apply a changed config, launch a new instance (`user_data_replace_on_change` in Terraform).
+- **Validate** with `cloud-init schema` before and after deploying.
+- A valid cloud-config can still produce a broken service. Check the **service itself** too (`nginx -t`, `curl localhost`, logs).
+- Tutorials are written for a specific distro; adapt paths and defaults to the one you're using.
+
+---
+
+## Sources
+
+- [cloud-init module reference](https://docs.cloud-init.io/en/latest/reference/modules.html)
+- [cloud-init configuration priority / user data formats](https://docs.cloud-init.io/en/latest/explanation/format/index.html)
+- [Terraform `aws_instance` resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
+- [nginx `server_name` and `default_server`](https://nginx.org/en/docs/http/request_processing.html)
