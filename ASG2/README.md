@@ -2,7 +2,7 @@
 
 Automated deployment of an NGINX web server on AWS EC2. Terraform creates the infrastructure, and a cloud-init file configures the server on first boot. When the instance comes up, the website is already live with **no manual steps**.
 
-![My website live on EC2](screenshots/03-my-website-live.png)
+![My website live on EC2](screenshots-asg2/03-my-website-live.png)
 
 ---
 
@@ -33,7 +33,7 @@ Automated deployment of an NGINX web server on AWS EC2. Terraform creates the in
 ├── variables.tf       # region, instance type, AMI, etc.
 ├── outputs.tf         # public IP and website URL
 ├── cloud-init.yaml    # server configuration applied on first boot
-├── screenshots/       # validation error, nginx default page, final result
+├── screenshots-asg2/  # validation error, nginx default page, final result
 └── README.md
 ```
 
@@ -247,7 +247,7 @@ write_files.2: 'path' is a required property,
 write_files.3: 'path' is a required property
 ```
 
-![Schema validation error](screenshots/01-schema-validation-error.png)
+![Schema validation error](screenshots-asg2/01-schema-validation-error.png)
 
 **Cause:** I put a dash (`-`) in front of every key in a file entry. In YAML a dash starts a **new list item**, so cloud-init saw several "files" without a path.
 
@@ -285,7 +285,7 @@ I started a new `write_files:` block for the second file. A YAML key can only ap
 
 Validation passed and nginx was running, but the browser showed **"Welcome to nginx!"**.
 
-![nginx default page instead of my site](screenshots/02-nginx-default-page.png)
+![nginx default page instead of my site](screenshots-asg2/02-nginx-default-page.png)
 
 **Cause:** Amazon Linux's `nginx.conf` already contains a default site on port 80. I was visiting the bare IP, which matched neither site's `server_name`, so nginx used its fallback site, the built-in one.
 
@@ -293,7 +293,7 @@ Validation passed and nginx was running, but the browser showed **"Welcome to ng
 
 **Fix:** add `default_server` to my `listen` lines. After that, the browser showed my **Hello, World!** page, all configured automatically by cloud-init:
 
-![My website live on EC2](screenshots/03-my-website-live.png)
+![My website live on EC2](screenshots-asg2/03-my-website-live.png)
 
 **Related lesson:** the nginx config came from Ubuntu's official tutorial, which uses port 81 to avoid exactly this clash and a different folder layout (`sites-enabled/`). Official examples assume their own distro.
 
