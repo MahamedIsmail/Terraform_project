@@ -187,20 +187,6 @@ Next I tried `echo "..." > wp-config.php`. It ran, but it **overwrote the whole 
 
 **Fix:** `user_data_replace_on_change = true`, so Terraform replaces the instance whenever the script changes. The side effect is that each rebuild gets a **new public IP**, which is why the IP is printed as an output.
 
-### 5. `Reference to undeclared resource` when reading a module output
-
-```hcl
-value = EC2_mod.webserver_ip          # ❌ Terraform reads this as a resource
-value = module.EC2_mod.webserver_ip   # ✅ module outputs need the module. prefix
-```
-
-**Lesson:** resources are `type.name`, variables are `var.name`, and module outputs are `module.<module>.<output>`.
-
-### 6. Git: keeping secrets out and pushing over SSH
-
-- **`.gitignore` typo:** I wrote `.terrafrom/**` instead of `.terraform/**`, so the provider folder wasn't ignored. `git check-ignore -v <file>` showed exactly which rule matched, or that none did.
-- **`*.tfstate` didn't catch `terraform.tfstate.backup`**, because `*.tfstate` only matches names *ending* in `.tfstate`. The backup needed its own pattern.
-- **`Permission denied (publickey)` on push:** my SSH key has a custom name (`gitid`), so SSH never tried it automatically, and no ssh-agent was running. I fixed it by starting the agent and adding the **private** key (`ssh-add ~/.ssh/gitid`, not the `.pub`).
 
 ---
 
@@ -214,13 +200,3 @@ value = module.EC2_mod.webserver_ip   # ✅ module outputs need the module. pref
 - **Secrets and state.** I marked passwords `sensitive` and kept `terraform.tfvars` and `terraform.tfstate` out of Git, because state stores values in plain text.
 - **Key pair choice.** I used an existing AWS key pair instead of generating one with Terraform's `tls_private_key`. That resource stores the private key unencrypted in the state file.
 
-## Next improvements
-
-- Set a MariaDB root password and remove the test database (equivalent to `mysql_secure_installation`).
-- Generate WordPress security keys and salts in `wp-config.php` instead of leaving the defaults.
-- Look up the AMI with a `data "aws_ami"` source instead of hard-coding an ID that only works in `eu-north-1`.
-- Mark the database variables `sensitive` in the root module too, and fix the copy-pasted variable descriptions.
-- Commit `.terraform.lock.hcl` so everyone uses the same provider version (my `*.hcl` ignore rule currently excludes it).
-- Remove the outbound SSH rule, which the server doesn't need.
-- Store state in a remote S3 backend so the project can be shared safely.
-- Move the database to Amazon RDS and add HTTPS with a certificate.
