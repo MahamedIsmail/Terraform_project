@@ -88,6 +88,6 @@ resource "aws_vpc_security_group_egress_rule"  "allow_ssh"{
    ip_protocol="tcp" 
 }
 
-## chose an exitig key pair beacse its more secure building it in aws, terrfroms way tls resouce will create a new key pair and store the private key in a local state file unencrypted, which is not secure.
+
 
 
