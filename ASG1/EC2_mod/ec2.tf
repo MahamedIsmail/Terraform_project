@@ -26,22 +26,7 @@ tags={
 
 }
 }
-###fixa securty groups: done
-## koppla dem til ec2: done
-## fixa storage : done 
-# skapa en key pair: done 
-# koppla keypair till ec2: done 
-#userscript
-#install wordpress done
-#install maria db done
-# creat a secure password aka use sensitve and varible done
-# creat db, connect to user done 
-# configure wordpress to your db done 
-# creat user/data error den kördes aldrig kolla up cloadinit vad gick fel goola 
-# kolla up df search do kan hjälpa userscript !
-#user script done screnna 
-# gör wizard för att fixa sidan !
-# error din root password måste va fixad !!!! de därför wizard inte funkar 
+
 
 
 resource "aws_security_group"  "webserver_sg" {  
