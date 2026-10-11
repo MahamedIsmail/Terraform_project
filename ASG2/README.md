@@ -6,7 +6,7 @@ Automated deployment of an NGINX web server on AWS EC2. Terraform creates the in
 
 ---
 
-## Assignment requirements
+
 
 **Objective:** Configure a cloud-init file and use Terraform to automate an EC2 deployment.
 
@@ -17,13 +17,7 @@ Automated deployment of an NGINX web server on AWS EC2. Terraform creates the in
 - [x] Pass cloud-init to the EC2 instance through Terraform
 - [x] Ensure the instance comes online fully configured with no manual steps
 
-**What should be demonstrated**
 
-- How Terraform uses `user_data` or `user_data_base64`
-- How cloud-init automates instance configuration
-- How to structure Terraform for clarity (variables, outputs, modules if needed)
-
----
 
 ## Repository structure
 
@@ -32,7 +26,12 @@ Automated deployment of an NGINX web server on AWS EC2. Terraform creates the in
 ├── main.tf            # provider, security group, EC2 instance
 ├── variables.tf       # region, instance type, AMI, etc.
 ├── outputs.tf         # public IP and website URL
-├── cloud-init.yaml    # server configuration applied on first boot
+├── EC2_mod/              # child module: everything about the web server
+│   ├── scripts/          # cloud-init config applied on first boot
+│   ├── ec2.tf            # EC2 instance and security group
+│   ├── local.tf          # module locals (AMI, instance type, etc.)
+│   ├── output.tf         # exposes the instance's public IP to the root module
+│   └── variable.tf       # module inputs
 ├── screenshots-asg2/  # validation error, nginx default page, final result
 └── README.md
 ```
@@ -58,54 +57,6 @@ Instance boots → cloud-init reads the user data
 Website is live at http://<public-ip>
 ```
 
----
-
-## The cloud-init file
-
-```yaml
-#cloud-config
-package_update: true
-packages:
-  - nginx
-
-write_files:
-  - path: /var/www/Website/index.html
-    permissions: '0644'
-    defer: true
-    content: |
-      <html>
-        <head>
-          <title>Welcome to My Website</title>
-        </head>
-        <body>
-          <h1>Hello, World!</h1>
-          <p>Hosted on an EC2 instance in nginx webserver.</p>
-        </body>
-      </html>
-
-  - path: /etc/nginx/conf.d/site.conf
-    permissions: '0644'
-    defer: true
-    content: |
-      server {
-          listen 80 default_server;
-          listen [::]:80 default_server;
-
-          server_name _;
-
-          root /var/www/Website;
-          index index.html;
-
-          location / {
-              try_files $uri $uri/ =404;
-          }
-      }
-
-runcmd:
-  - nginx -t
-  - systemctl enable nginx
-  - systemctl restart nginx
-```
 
 ### What each part does
 
@@ -126,84 +77,6 @@ runcmd:
 
 ---
 
-## Terraform: passing cloud-init to EC2
-
-> Adjust names below to match the `.tf` files in this repo.
-
-### `user_data` vs `user_data_base64`
-
-| Argument | Use when |
-|---|---|
-| `user_data` | You pass **plain text** (like a YAML file). The AWS provider base64-encodes it for you. Used in this project. |
-| `user_data_base64` | The data is **already base64-encoded**, e.g. gzipped or multi-part output from the `cloudinit_config` data source. |
-
-### `main.tf` (core parts)
-
-```hcl
-resource "aws_security_group" "web" {
-  name        = "web-sg"
-  description = "Allow HTTP and SSH"
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip_cidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_instance" "web" {
-  ami                    = var.ami_id
-  instance_type          = var.instance_type
-  key_name               = var.key_name
-  vpc_security_group_ids = [aws_security_group.web.id]
-
-  user_data                   = file("${path.module}/cloud-init.yaml")
-  user_data_replace_on_change = true
-
-  tags = {
-    Name = "cloud-init-nginx"
-  }
-}
-```
-
-`user_data_replace_on_change = true` matters: most cloud-init modules run **once per instance**, so editing the YAML on an existing instance does nothing. This setting makes Terraform replace the instance when the cloud-init file changes, so the new config actually runs.
-
-### `variables.tf`
-
-```hcl
-variable "region"        { default = "eu-north-1" }
-variable "instance_type" { default = "t3.micro" }
-variable "ami_id"        { description = "Amazon Linux 2023 AMI ID" }
-variable "key_name"      { description = "EC2 key pair for SSH" }
-variable "my_ip_cidr"    { description = "Your IP for SSH, e.g. 1.2.3.4/32" }
-```
-
-### `outputs.tf`
-
-```hcl
-output "public_ip" {
-  value = aws_instance.web.public_ip
-}
-
-output "website_url" {
-  value = "http://${aws_instance.web.public_ip}"
-}
-```
 
 ### Deploy
 
