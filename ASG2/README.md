@@ -164,27 +164,6 @@ Validation passed and nginx was running, but the browser showed **"Welcome to ng
 
 ![My website live on EC2](screenshots-asg2/03-my-website-live.png)
 
-**Related lesson:** the nginx config came from Ubuntu's official tutorial, which uses port 81 to avoid exactly this clash and a different folder layout (`sites-enabled/`). Official examples assume their own distro.
-
----
-
-## Debugging steps
-
-| What to check | Command |
-|---|---|
-| Did cloud-init finish, and with errors? | `cloud-init status --long` |
-| Output of package installs and `runcmd` | `sudo cat /var/log/cloud-init-output.log` |
-| Detailed cloud-init log (module by module) | `sudo less /var/log/cloud-init.log` |
-| The user data the instance actually received | `sudo cat /var/lib/cloud/instance/user-data.txt` |
-| Validate the received config | `sudo cloud-init schema --system` |
-| Were the files written? | `ls -l /var/www/Website/ /etc/nginx/conf.d/` |
-| Is the nginx config valid? | `sudo nginx -t` |
-| What nginx actually loaded | `sudo nginx -T \| grep -E "listen\|server_name\|root"` |
-| What the server returns locally | `curl localhost` |
-| Requests and errors | `/var/log/nginx/access.log`, `/var/log/nginx/error.log` |
-
-If `curl localhost` shows the page but the browser doesn't, the problem is outside the server: security group, `http://` vs `https://`, or the wrong IP.
-
 ---
 
 ## Why cloud-config instead of a plain user-data script
@@ -204,16 +183,8 @@ User data can also be a bash script (`#!/bin/bash`). This project uses `#cloud-c
 ## Key takeaways
 
 - A **dash** starts a new list item; **indentation** decides what belongs to what.
-- Most cloud-init modules run **once per instance**. To apply a changed config, launch a new instance (`user_data_replace_on_change` in Terraform).
 - **Validate** with `cloud-init schema` before and after deploying.
 - A valid cloud-config can still produce a broken service. Check the **service itself** too (`nginx -t`, `curl localhost`, logs).
-- Tutorials are written for a specific distro; adapt paths and defaults to the one you're using.
+
 
 ---
-
-## Sources
-
-- [cloud-init module reference](https://docs.cloud-init.io/en/latest/reference/modules.html)
-- [cloud-init configuration priority / user data formats](https://docs.cloud-init.io/en/latest/explanation/format/index.html)
-- [Terraform `aws_instance` resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
-- [nginx `server_name` and `default_server`](https://nginx.org/en/docs/http/request_processing.html)
