@@ -58,7 +58,7 @@ Website is live at http://<public-ip>
 ```
 
 
-### What each part does
+### What each model in the cloud config does
 
 | Key | Module | Purpose |
 |---|---|---|
@@ -101,10 +101,6 @@ cloud-init schema --config-file cloud-init.yaml
 # On a running instance, check the user data it booted with
 sudo cloud-init schema --system
 ```
-
-A valid file prints `Valid cloud-config`.
-
-> **Note:** On Amazon Linux 2023 (cloud-init 22.2.2) the `--annotate` flag crashes with a Python `KeyError` when the config has errors. Run without `--annotate` to see the error list.
 
 ---
 
