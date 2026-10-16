@@ -24,7 +24,7 @@ Automated deployment of an NGINX web server on AWS EC2. Terraform creates the in
 ```
 .
 ├── main.tf            # provider, EC2 instance
-├── variables.tf       # region, instance type, AMI, etc.
+├── variables.tf       # Input variables for the MariaDB server deployment
 ├── outputs.tf         # public IP and website URL
 ├── EC2_mod/              # child module: everything about the web server
 │   ├── scripts/          # cloud-init config applied on first boot
