@@ -23,7 +23,7 @@ Automated deployment of an NGINX web server on AWS EC2. Terraform creates the in
 
 ```
 .
-├── main.tf            # provider, security group, EC2 instance
+├── main.tf            # provider, EC2 instance
 ├── variables.tf       # region, instance type, AMI, etc.
 ├── outputs.tf         # public IP and website URL
 ├── EC2_mod/              # child module: everything about the web server
