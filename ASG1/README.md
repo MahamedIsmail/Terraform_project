@@ -13,7 +13,6 @@ https://github.com/user-attachments/assets/6c816635-a9cc-4bd7-a9cd-56ac27cdfc4b
 
 
 
-**Tech:** Terraform · AWS (VPC, Subnet, Internet Gateway, Route Table, Security Groups, EC2) · Amazon Linux 2023 · Bash · cloud-init · Apache · PHP · MariaDB · WordPress
 
 ## The result
 
