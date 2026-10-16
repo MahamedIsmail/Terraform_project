@@ -193,9 +193,7 @@ Next I tried `echo "..." > wp-config.php`. It ran, but it **overwrote the whole 
 
 - **Infrastructure as Code end to end.** Terraform builds the network, the firewall and the server in the right order from code, and `terraform destroy` removes everything, so nothing is forgotten and left running.
 - **Modules and outputs.** The root module builds the network, and the child module owns the web server. Values flow *in* through variables and *out* through outputs.
-- **Networking fundamentals.** A subnet is only "public" when its route table sends `0.0.0.0/0` to an internet gateway. Security groups filter traffic **in both directions**.
 - **Automation means non-interactive.** Anything that waits for input (`mysql -p`, `nano`, prompts) will hang or break in user data.
 - **Debugging on the instance.** `set -x`, `/var/log/cloud-init-output.log` and running the commands by hand over SSH showed me where each failure happened.
-- **Secrets and state.** I marked passwords `sensitive` and kept `terraform.tfvars` and `terraform.tfstate` out of Git, because state stores values in plain text.
 - **Key pair choice.** I used an existing AWS key pair instead of generating one with Terraform's `tls_private_key`. That resource stores the private key unencrypted in the state file.
 
