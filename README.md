@@ -7,7 +7,7 @@ Two hands-on assignments where AWS infrastructure is built entirely from code wi
 | **Goal** | Deploy a full WordPress stack | Deploy an NGINX web server |
 | **Bootstrapping** | Bash user data script, rendered with `templatefile()` | `#cloud-config` YAML file |
 | **Result** | Live WordPress site with working admin dashboard | Custom website served by NGINX |
-| **Terraform structure** | Root module (network) + EC2 child module | Root module + EC2 child module |
+
 
 ---
 
