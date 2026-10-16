@@ -170,7 +170,7 @@ Validation passed and nginx was running, but the browser showed **"Welcome to ng
 
 User data can also be a bash script (`#!/bin/bash`). This project uses `#cloud-config` instead, and it turned out to be much smoother:
 
-- **Modules do the work for you.** Each key (`packages`, `write_files`, `runcmd`, `users`, `timezone`…) is handled by a module that knows how to do that job properly. No need to write the logic for creating folders, setting permissions or decoding content.
+- **Modules do the work for you.** Each key (`packages`, `write_files`, `runcmd`, `users`, `timezone`…) is handled by a module that knows how to do that job properly. No need to write the logic for creating folders, setting permissions (you just declare them, e.g. permissions: '0640') or decoding content.
 - **Tasks and configuration are separated.** Installing software, writing files and running commands are clearly separate sections, instead of one long script mixing everything.
 - **Distro-independent.** `packages:` uses `dnf` on Amazon Linux and `apt` on Ubuntu, with the same YAML.
 - **Ordering is handled.** Modules run in defined boot stages, and `defer: true` lets files be written after packages are installed.
@@ -180,11 +180,3 @@ User data can also be a bash script (`#!/bin/bash`). This project uses `#cloud-c
 
 ---
 
-## Key takeaways
-
-- A **dash** starts a new list item; **indentation** decides what belongs to what.
-- **Validate** with `cloud-init schema` before and after deploying.
-- A valid cloud-config can still produce a broken service. Check the **service itself** too (`nginx -t`, `curl localhost`, logs).
-
-
----
