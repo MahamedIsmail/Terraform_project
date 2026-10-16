@@ -95,7 +95,7 @@ The script runs as root on first boot and is split into five phases:
 
 ## How to run it
 
-**Requirements:** an AWS account, the AWS CLI configured (`aws configure`), Terraform, and an existing EC2 key pair named `wordpress_webserver_key` in `eu-north-1`.
+**Requirements:** an AWS account, the AWS CLI configured (`aws configure`), Terraform, and an existing EC2 key pair.
 
 1. Create `terraform.tfvars` in the project root (it's git-ignored):
 
